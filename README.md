@@ -1,20 +1,34 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Paper Composer
 
-# Run and deploy your AI Studio app
+Transform handwritten notes and exam papers into professionally formatted, print-ready A4 digital documents using AI-powered OCR and formatting.
 
-This contains everything you need to run your app locally.
+## Deployment Instructions
 
-View your app in AI Studio: https://ai.studio/apps/drive/1vr1fep_emSImpw6d7JtzC6WPDY-F7Llo
+This application is built with React, Vite, and Tailwind CSS. It can be easily deployed to platforms like **Vercel** or **Netlify**.
 
-## Run Locally
+### Environment Variables
 
-**Prerequisites:**  Node.js
+The application requires a Gemini API key to function. You must set the following environment variable in your deployment platform's settings:
 
+- `GEMINI_API_KEY`: Your Google Gemini API key. You can get one from [Google AI Studio](https://aistudio.google.com/).
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### Deploying to Vercel
+
+1. Push your code to a GitHub repository.
+2. Import the project into Vercel.
+3. Add the `GEMINI_API_KEY` environment variable.
+4. Vercel will automatically detect Vite and use `npm run build` with the `dist` output directory.
+
+### Deploying to Netlify
+
+1. Push your code to a GitHub repository.
+2. Import the project into Netlify.
+3. Add the `GEMINI_API_KEY` environment variable in the "Site configuration" > "Environment variables" section.
+4. Netlify will use the `netlify.toml` file included in the repository for routing configuration.
+
+## Local Development
+
+1. Clone the repository.
+2. Install dependencies: `npm install`.
+3. Create a `.env.local` file and add your `GEMINI_API_KEY`.
+4. Start the development server: `npm run dev`.

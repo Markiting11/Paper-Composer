@@ -1,20 +1,93 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import FileUploader from './components/FileUploader';
 import ProcessingState from './components/ProcessingState';
 import EditorSection from './components/EditorSection';
 import A4Preview from './components/A4Preview';
+import Login from './components/Login';
+import AdminPanel from './components/AdminPanel';
 import { processHandwrittenImage } from './services/geminiService';
 import { exportToDocx } from './services/wordExportService';
-import { AppState, ExamPaperData, UploadedFile } from './types';
+import { AppState, ExamPaperData, UploadedFile, User, UserStatus } from './types';
 
 const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>(AppState.LANDING);
+  const [appState, setAppState] = useState<AppState>(AppState.AUTH);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [signupEnabled, setSignupEnabled] = useState(true);
+  
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [examData, setExamData] = useState<ExamPaperData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+  // Load persistence data
+  useEffect(() => {
+    const savedUsers = localStorage.getItem('as_users');
+    if (savedUsers) setUsers(JSON.parse(savedUsers));
+    
+    const savedSignup = localStorage.getItem('as_signup_enabled');
+    if (savedSignup !== null) setSignupEnabled(JSON.parse(savedSignup));
+
+    const session = localStorage.getItem('as_session');
+    if (session) {
+      const user = JSON.parse(session);
+      // Extra security check for hardcoded admin
+      if (user.email === 'arshad2097@gmail.com' && user.id === 'admin') {
+        setCurrentUser(user);
+        setAppState(AppState.LANDING);
+      } else {
+        // Verification against stored user list
+        const usersList: User[] = JSON.parse(localStorage.getItem('as_users') || '[]');
+        const verifiedUser = usersList.find(u => u.email === user.email && u.status === 'APPROVED');
+        if (verifiedUser) {
+          setCurrentUser(verifiedUser);
+          setAppState(AppState.LANDING);
+        }
+      }
+    }
+  }, []);
+
+  // Save changes to local storage
+  useEffect(() => {
+    localStorage.setItem('as_users', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('as_signup_enabled', JSON.stringify(signupEnabled));
+  }, [signupEnabled]);
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+    localStorage.setItem('as_session', JSON.stringify(user));
+    setAppState(AppState.LANDING);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('as_session');
+    setAppState(AppState.AUTH);
+  };
+
+  const handleSignupRequest = (email: string) => {
+    const newUser: User = {
+      id: Math.random().toString(36).substr(2, 9),
+      email,
+      role: 'USER',
+      status: 'PENDING',
+      createdAt: new Date().toISOString()
+    };
+    setUsers([...users, newUser]);
+  };
+
+  const updateUserStatus = (id: string, status: UserStatus) => {
+    setUsers(users.map(u => u.id === id ? { ...u, status } : u));
+  };
+
+  const deleteUser = (id: string) => {
+    setUsers(users.filter(u => u.id !== id));
+  };
 
   const reset = () => {
     setAppState(AppState.LANDING);
@@ -94,9 +167,34 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-blue-100">
-      <Header onReset={reset} />
+      <Header 
+        onReset={reset} 
+        user={currentUser} 
+        onLogout={handleLogout}
+        onOpenAdmin={() => setAppState(AppState.ADMIN_PANEL)}
+        currentState={appState}
+      />
       
       <main className="flex-1 flex flex-col overflow-hidden no-print">
+        {appState === AppState.AUTH && (
+          <Login 
+            onLogin={handleLogin} 
+            allowSignup={signupEnabled} 
+            onSignupRequest={handleSignupRequest} 
+          />
+        )}
+
+        {appState === AppState.ADMIN_PANEL && (
+          <AdminPanel 
+            users={users} 
+            onApprove={(id) => updateUserStatus(id, 'APPROVED')}
+            onReject={(id) => updateUserStatus(id, 'REJECTED')}
+            onDelete={deleteUser}
+            signupEnabled={signupEnabled}
+            onToggleSignup={setSignupEnabled}
+          />
+        )}
+
         {appState === AppState.LANDING && (
           <div className="relative overflow-hidden">
             {/* Background Decorations */}
@@ -232,26 +330,24 @@ const App: React.FC = () => {
         {examData && <A4Preview data={examData} isExportVersion={true} />}
       </div>
 
-      {appState === AppState.LANDING && (
-        <footer className="no-print border-t border-slate-200 py-16 bg-white mt-auto">
-          <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-xl font-black overflow-hidden shadow-md">
-                <img src="logo.png" alt="AS" className="w-full h-full object-cover" onError={(e) => {
-                  (e.target as HTMLImageElement).src = "https://ui-avatars.com/api/?name=Anwar+Ali+Sehar&background=0F172A&color=fff&bold=true";
-                }} />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-black text-slate-900 tracking-tight text-xl uppercase">Anwar Ali Sehar</span>
-                <span className="text-[10px] font-bold text-slate-400 tracking-[0.3em] uppercase">Professional AI Composer</span>
-              </div>
+      <footer className="no-print border-t border-slate-200 py-16 bg-white mt-auto">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-8">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-xl font-black overflow-hidden shadow-md">
+              <img src="logo.png" alt="AS" className="w-full h-full object-cover" onError={(e) => {
+                (e.target as HTMLImageElement).src = "https://ui-avatars.com/api/?name=Anwar+Ali+Sehar&background=0F172A&color=fff&bold=true";
+              }} />
             </div>
-            <p className="text-slate-400 font-bold text-xs tracking-widest uppercase">
-              © 2024 Anwar Ali Sehar. All Rights Reserved.
-            </p>
+            <div className="flex flex-col">
+              <span className="font-black text-slate-900 tracking-tight text-xl uppercase">Anwar Ali Sehar</span>
+              <span className="text-[10px] font-bold text-slate-400 tracking-[0.3em] uppercase">Professional AI Composer</span>
+            </div>
           </div>
-        </footer>
-      )}
+          <p className="text-slate-400 font-bold text-xs tracking-widest uppercase">
+            © 2024 Anwar Ali Sehar. All Rights Reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };

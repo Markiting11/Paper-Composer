@@ -235,9 +235,9 @@ export const exportToDocx = async (data: ExamPaperData) => {
                 alignment: AlignmentType.CENTER,
                 spacing: { before: 200, after: 200 },
                 children: [
-                  new TextRun({ text: "(Instructions: ", italic: true, size: 20 }),
+                  new TextRun({ text: "(Instructions: ", italics: true, size: 20 }),
                   ...parseMathToTextRuns(section.instructions, 20),
-                  new TextRun({ text: ")", italic: true, size: 20 }),
+                  new TextRun({ text: ")", italics: true, size: 20 }),
                 ],
               }),
             ] : [new Paragraph({ spacing: { before: 200 } })]),
