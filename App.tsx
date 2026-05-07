@@ -107,7 +107,7 @@ const App: React.FC = () => {
   };
 
   const reset = () => {
-    setAppState(AppState.LANDING);
+    setAppState(currentUser ? AppState.LANDING : AppState.AUTH);
     setUploadedFiles([]);
     setExamData(null);
     setError(null);
@@ -210,14 +210,14 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 flex flex-col overflow-hidden no-print">
-        {appState === AppState.AUTH && (
+        {(!currentUser || appState === AppState.AUTH) && (
           <Login 
             onLogin={handleLogin} 
             allowSignup={signupEnabled} 
           />
         )}
 
-        {appState === AppState.ADMIN_PANEL && (
+        {currentUser && appState === AppState.ADMIN_PANEL && (
           <AdminPanel 
             users={users} 
             onApprove={(id) => updateUserStatus(id, 'APPROVED')}
@@ -228,7 +228,7 @@ const App: React.FC = () => {
           />
         )}
 
-        {appState === AppState.LANDING && (
+        {currentUser && appState === AppState.LANDING && (
           <div className="relative overflow-hidden">
             {/* Background Decorations */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[600px] bg-[radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.1),transparent_70%)] -z-10"></div>
@@ -294,13 +294,13 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {appState === AppState.PROCESSING && (
+        {currentUser && appState === AppState.PROCESSING && (
           <div className="flex-1 flex items-center justify-center bg-white/40 backdrop-blur-xl">
             <ProcessingState />
           </div>
         )}
 
-        {appState === AppState.EDITOR && examData && (
+        {currentUser && appState === AppState.EDITOR && examData && (
           <div className="flex-1 flex h-full overflow-hidden bg-slate-100">
             {/* Left Editor Panel */}
             <div className="w-[450px] flex flex-col bg-white border-r border-slate-200 shadow-2xl z-20 overflow-hidden no-print">
