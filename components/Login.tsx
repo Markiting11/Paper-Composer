@@ -1,59 +1,60 @@
 
 import React, { useState } from 'react';
-import { User, UserRole, UserStatus } from '../types';
+import { User } from '../types';
+import { auth, googleProvider } from '../services/firebase';
+import { signInWithPopup } from 'firebase/auth';
+import { getUserProfile, createUserProfile } from '../services/userService';
 
 interface LoginProps {
   onLogin: (user: User) => void;
   allowSignup: boolean;
-  onSignupRequest: (email: string) => void;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, allowSignup, onSignupRequest }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+const Login: React.FC<LoginProps> = ({ onLogin, allowSignup }) => {
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
+    setLoading(true);
     setError('');
-
-    if (isLogin) {
-      // Hardcoded Admin
-      if (email === 'arshad2097@gmail.com' && password === 'anwar786') {
-        onLogin({
-          id: 'admin',
-          email,
-          role: 'ADMIN',
-          status: 'APPROVED',
-          createdAt: new Date().toISOString()
-        });
-        return;
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const fbUser = result.user;
+      
+      if (!fbUser.email) {
+        throw new Error("No email associated with this Google account.");
       }
 
-      // Check for approved users in local storage
-      const users: User[] = JSON.parse(localStorage.getItem('as_users') || '[]');
-      const user = users.find(u => u.email === email);
+      let profile = await getUserProfile(fbUser.uid);
       
-      if (user) {
-        if (user.status === 'APPROVED') {
-          onLogin(user);
-        } else if (user.status === 'PENDING') {
+      if (!profile) {
+        if (!allowSignup) {
+          await auth.signOut();
+          setError('Signups are currently disabled by the administrator.');
+          setLoading(false);
+          return;
+        }
+        // Create pending profile
+        await createUserProfile(fbUser.uid, fbUser.email);
+        profile = await getUserProfile(fbUser.uid);
+      }
+
+      if (profile) {
+        if (profile.status === 'APPROVED') {
+          onLogin(profile);
+        } else if (profile.status === 'PENDING') {
           setError('Your account is pending approval by Anwar Ali Sehar.');
+          await auth.signOut();
         } else {
           setError('Access to this account has been denied.');
+          await auth.signOut();
         }
-      } else {
-        setError('Invalid credentials or user does not exist.');
       }
-    } else {
-      if (!allowSignup) {
-        setError('Signups are currently disabled by the administrator.');
-        return;
-      }
-      onSignupRequest(email);
-      setIsLogin(true);
-      setError('Signup request sent! Please wait for admin approval.');
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to sign in with Google.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -68,14 +69,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, allowSignup, onSignupRequest }) 
                }} />
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-              {isLogin ? 'Welcome Back' : 'Join the Platform'}
+              Paper Composer AI
             </h1>
-            <p className="text-slate-500 font-bold text-sm mt-2 text-center">
-              Anwar Ali Sehar Paper Composer AI
+            <p className="text-slate-500 font-bold text-sm mt-2 text-center px-4">
+              A professional tool by Anwar Ali Sehar for transforming handwritten notes into digital papers.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-6">
             {error && (
               <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl text-xs font-black flex items-center gap-3">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -85,47 +86,24 @@ const Login: React.FC<LoginProps> = ({ onLogin, allowSignup, onSignupRequest }) 
               </div>
             )}
 
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Email Address</label>
-              <input 
-                type="email" 
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-50 font-bold transition-all"
-                placeholder="name@example.com"
-              />
-            </div>
-
-            {isLogin && (
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Password</label>
-                <input 
-                  type="password" 
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-4 focus:ring-blue-50 font-bold transition-all"
-                  placeholder="••••••••"
-                />
-              </div>
-            )}
-
             <button 
-              type="submit"
-              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm shadow-xl hover:bg-slate-800 transition-all active:scale-95 mt-4"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-100 py-4 rounded-2xl font-black text-sm text-slate-700 shadow-sm hover:bg-slate-50 transition-all active:scale-95"
             >
-              {isLogin ? 'Login Securely' : 'Request Access'}
+              <img src="https://www.google.com/favicon.ico" alt="G" className="w-5 h-5" />
+              {loading ? 'Processing...' : 'Continue with Google'}
             </button>
-          </form>
+
+            <p className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed px-6">
+              Access is restricted. New accounts will require manual approval from the administrator.
+            </p>
+          </div>
 
           <div className="mt-10 pt-8 border-t border-slate-100 text-center">
-            <button 
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-xs font-black text-blue-600 uppercase tracking-widest hover:text-blue-700 transition-colors"
-            >
-              {isLogin ? 'Don\'t have access? Sign up' : 'Already have an account? Login'}
-            </button>
+             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+               Powered by Google Gemini 2.0
+             </span>
           </div>
         </div>
       </div>

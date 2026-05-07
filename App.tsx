@@ -10,83 +10,100 @@ import AdminPanel from './components/AdminPanel';
 import { processHandwrittenImage } from './services/geminiService';
 import { exportToDocx } from './services/wordExportService';
 import { AppState, ExamPaperData, UploadedFile, User, UserStatus } from './types';
+import { auth } from './services/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { 
+  getUserProfile, 
+  subscribeToAllUsers, 
+  updateUserStatus as fsUpdateUserStatus, 
+  getGlobalConfig,
+  updateGlobalConfig
+} from './services/userService';
+import { saveExamPaper } from './services/examPaperService';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.AUTH);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [signupEnabled, setSignupEnabled] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
   
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [examData, setExamData] = useState<ExamPaperData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
-  // Load persistence data
+  // Auth Listener
   useEffect(() => {
-    const savedUsers = localStorage.getItem('as_users');
-    if (savedUsers) setUsers(JSON.parse(savedUsers));
-    
-    const savedSignup = localStorage.getItem('as_signup_enabled');
-    if (savedSignup !== null) setSignupEnabled(JSON.parse(savedSignup));
-
-    const session = localStorage.getItem('as_session');
-    if (session) {
-      const user = JSON.parse(session);
-      // Extra security check for hardcoded admin
-      if (user.email === 'arshad2097@gmail.com' && user.id === 'admin') {
-        setCurrentUser(user);
-        setAppState(AppState.LANDING);
-      } else {
-        // Verification against stored user list
-        const usersList: User[] = JSON.parse(localStorage.getItem('as_users') || '[]');
-        const verifiedUser = usersList.find(u => u.email === user.email && u.status === 'APPROVED');
-        if (verifiedUser) {
-          setCurrentUser(verifiedUser);
-          setAppState(AppState.LANDING);
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setAuthLoading(true);
+      if (fbUser) {
+        const profile = await getUserProfile(fbUser.uid);
+        if (profile && profile.status === 'APPROVED') {
+          setCurrentUser(profile);
+          // Only switch to landing if we were at AUTH or if we refreshed
+          setAppState(prev => (prev === AppState.AUTH ? AppState.LANDING : prev));
+        } else {
+          setCurrentUser(null);
+          setAppState(AppState.AUTH);
         }
+      } else {
+        setCurrentUser(null);
+        setAppState(AppState.AUTH);
       }
-    }
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Save changes to local storage
+  // Admin Listeners
   useEffect(() => {
-    localStorage.setItem('as_users', JSON.stringify(users));
-  }, [users]);
+    if (currentUser?.role === 'ADMIN') {
+      const unsubUsers = subscribeToAllUsers(setUsers);
+      const unsubConfig = getGlobalConfig((config) => {
+        setSignupEnabled(config.signupEnabled);
+      });
+      return () => {
+        unsubUsers();
+        unsubConfig();
+      };
+    }
+  }, [currentUser]);
 
+  // Initial Config Listener (needed for Login screen)
   useEffect(() => {
-    localStorage.setItem('as_signup_enabled', JSON.stringify(signupEnabled));
-  }, [signupEnabled]);
+    if (appState === AppState.AUTH) {
+      const unsubConfig = getGlobalConfig((config) => {
+        setSignupEnabled(config.signupEnabled);
+      });
+      return () => unsubConfig();
+    }
+  }, [appState]);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    localStorage.setItem('as_session', JSON.stringify(user));
     setAppState(AppState.LANDING);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut(auth);
     setCurrentUser(null);
-    localStorage.removeItem('as_session');
     setAppState(AppState.AUTH);
   };
 
-  const handleSignupRequest = (email: string) => {
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      email,
-      role: 'USER',
-      status: 'PENDING',
-      createdAt: new Date().toISOString()
-    };
-    setUsers([...users, newUser]);
+  const updateUserStatus = async (id: string, status: UserStatus) => {
+    await fsUpdateUserStatus(id, status);
   };
 
-  const updateUserStatus = (id: string, status: UserStatus) => {
-    setUsers(users.map(u => u.id === id ? { ...u, status } : u));
+  const toggleSignup = async (enabled: boolean) => {
+    await updateGlobalConfig(enabled);
   };
 
   const deleteUser = (id: string) => {
-    setUsers(users.filter(u => u.id !== id));
+    // Note: We don't delete from auth in this simple version, just from Firestore
+    // userService would need a delete implementation if needed
+    console.log("Delete user requested for ID:", id);
   };
 
   const reset = () => {
@@ -105,6 +122,12 @@ const App: React.FC = () => {
       const base64Images = files.map(f => f.preview);
       const result = await processHandwrittenImage(base64Images);
       setExamData(result);
+      
+      // Save to Firebase for persistence
+      if (currentUser) {
+        await saveExamPaper(currentUser.id, result);
+      }
+      
       setAppState(AppState.EDITOR);
     } catch (err: any) {
       console.error(err);
@@ -165,6 +188,17 @@ const App: React.FC = () => {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-slate-500 font-bold text-sm tracking-widest uppercase">Initializing Secure Session...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col font-sans selection:bg-blue-100">
       <Header 
@@ -180,7 +214,6 @@ const App: React.FC = () => {
           <Login 
             onLogin={handleLogin} 
             allowSignup={signupEnabled} 
-            onSignupRequest={handleSignupRequest} 
           />
         )}
 
@@ -191,7 +224,7 @@ const App: React.FC = () => {
             onReject={(id) => updateUserStatus(id, 'REJECTED')}
             onDelete={deleteUser}
             signupEnabled={signupEnabled}
-            onToggleSignup={setSignupEnabled}
+            onToggleSignup={toggleSignup}
           />
         )}
 

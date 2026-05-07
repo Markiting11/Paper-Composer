@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and access control data",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["ADMIN", "USER"] },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "status", "createdAt"]
+    },
+    "ExamPaper": {
+      "title": "Exam Paper",
+      "description": "Digitalized exam paper content",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "subject": { "type": "string" },
+            "totalMarks": { "type": "string" },
+            "timeAllowed": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "data", "createdAt", "updatedAt"]
+    },
+    "GlobalConfig": {
+      "title": "Global Config",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "signupEnabled": { "type": "boolean" }
+      },
+      "required": ["signupEnabled"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Storage for user profile information"
+    },
+    "examPapers/{paperId}": {
+      "schema": "ExamPaper",
+      "description": "Storage for generated exam papers"
+    },
+    "config/global": {
+      "schema": "GlobalConfig",
+      "description": "Global settings for the application"
+    }
+  }
+}
